@@ -9,6 +9,55 @@ import time
 import random
 import os
 import atexit
+import webbrowser
+from cryptography.fernet import Fernet 
+""" Week One Contribution to an open source project """
+
+def generate_key():
+    """
+    Generates a key and save it into a file if it doesn't already exist.
+    """
+    key_file_path = "secret.key"
+    if not os.path.exists(key_file_path):
+        key = Fernet.generate_key()
+        with open(key_file_path, "wb") as key_file:
+            key_file.write(key)
+    else:
+        print("Key already exists. No new key generated.")
+
+def load_key():
+    """
+    Load the previously generated key
+    """
+    with open("secret.key", "rb") as key_file:
+        return key_file.read()
+
+def encrypt_message(message):
+    """
+    Encrypts a message
+    """
+    key = load_key()
+    encoded_message = message.encode()
+    f = Fernet(key)
+    encrypted_message = f.encrypt(encoded_message)
+    return encrypted_message
+     
+def decrypt_message(encrypted_message):
+    """
+    Decrypts an encrypted message
+    """
+    key = load_key()
+    f = Fernet(key)
+    decrypted_message = f.decrypt(encrypted_message)
+    return decrypted_message.decode()
+
+    songs = data["songs"]
+    for filename in songs:
+        dpg.add_button(label=f"{ntpath.basename(filename)}", callback=play, width=-1,
+                       height=25, user_data=filename.replace("\\", "/"), parent="list")
+        
+        dpg.add_spacer(height=2, parent="list")
+
 
 dpg.create_context()
 dpg.create_viewport(title="Rainy Music",large_icon="icon.ico",small_icon="icon.ico")
@@ -26,19 +75,42 @@ def update_volume(sender, app_data):
 	pygame.mixer.music.set_volume(app_data / 100.0)
 
 def load_database():
-	songs = json.load(open("data/songs.json", "r+"))["songs"]
-	for filename in songs:
-		dpg.add_button(label=f"{ntpath.basename(filename)}", callback=play, width=-1,
-					   height=25, user_data=filename.replace("\\", "/"), parent="list")
-		
-		dpg.add_spacer(height=2, parent="list")
+    # Load the encrypted data from the database
+    with open("data/songs.json", "rb") as db_file:
+        encrypted_data = db_file.read()
+
+    # Decrypt the data
+    decrypted_data_str = decrypt_message(encrypted_data)
+
+    # Convert the decrypted data from a string back to a dictionary
+    data = json.loads(decrypted_data_str)
+
+    # Clear existing items in the list (if any)
+    dpg.delete_item("list", children_only=True)
+
+    # Populate GUI with songs from decrypted data
+    for filename in data["songs"]:
+        dpg.add_button(label=f"{ntpath.basename(filename)}", callback=play, width=-1,
+                       height=25, user_data=filename.replace("\\", "/"), parent="list")
+        dpg.add_spacer(height=2, parent="list")
 
 
 def update_database(filename: str):
-	data = json.load(open("data/songs.json", "r+"))
-	if filename not in data["songs"]:
-		data["songs"] += [filename]
-	json.dump(data, open("data/songs.json", "r+"), indent=4)
+    with open("data/songs.json", "r+") as file:
+        data = json.load(file)
+        if filename not in data["songs"]:
+            data["songs"] += [filename]
+        
+        # Convert the data to a string
+        data_str = json.dumps(data)
+
+        # Encrypt the data
+        encrypted_data = encrypt_message(data_str)
+
+        # Write the encrypted data back to the file
+        file.seek(0)
+        file.write(encrypted_data)
+        file.truncate()
 
 def update_slider():
 	global state
@@ -161,6 +233,42 @@ def removeall():
 	json.dump(songs,open("data/songs.json", "w"),indent=4)
 	dpg.delete_item("list", children_only=True)
 	load_database()
+
+# Theme selector function
+def switch_theme(sender, app_data, user_data):
+    if app_data == "Fallout":
+        dpg.bind_theme("fallout_theme")
+    else:
+        dpg.bind_theme("base")
+
+# Create a single settings window with the specified size, position, and content
+with dpg.window(label="Settings", tag="settings_window", width=300, height=200, pos=(100, 100), no_move=False):
+    dpg.add_text("Select Theme:")
+    dpg.add_combo(["Default", "Fallout"], default_value="Default", callback=switch_theme)
+
+# fallout_theme
+with dpg.theme(tag="fallout_theme"):
+    with dpg.theme_component():
+        # Button colors
+        dpg.add_theme_color(dpg.mvThemeCol_Button, (59, 63, 68, 255))          # Muted green
+        dpg.add_theme_color(dpg.mvThemeCol_ButtonActive, (50, 55, 50, 255))    # Darker green when clicked
+        dpg.add_theme_color(dpg.mvThemeCol_ButtonHovered, (78, 83, 63, 255))   # Lighter green when hovered
+        
+        # Text and other element colors
+        dpg.add_theme_color(dpg.mvThemeCol_Text, (216, 169, 91, 255))          # Amber for text
+        dpg.add_theme_color(dpg.mvThemeCol_ChildBg, (30, 30, 30, 255))         # Dark gray for child background
+        dpg.add_theme_color(dpg.mvThemeCol_Border, (216, 169, 91, 255))        # Amber for borders
+        dpg.add_theme_color(dpg.mvThemeCol_FrameBgHovered, (172, 174, 197, 255)) # Light gray for hovered frames
+
+        # Styles (similar to the base theme)
+        dpg.add_theme_style(dpg.mvStyleVar_FrameRounding, 3)
+        dpg.add_theme_style(dpg.mvStyleVar_ChildRounding, 4)
+        dpg.add_theme_style(dpg.mvStyleVar_FramePadding, 4, 4)
+        dpg.add_theme_style(dpg.mvStyleVar_WindowRounding, 4, 4)
+        dpg.add_theme_style(dpg.mvStyleVar_WindowTitleAlign, 0.50, 0.50)
+        dpg.add_theme_style(dpg.mvStyleVar_WindowBorderSize, 0)
+        dpg.add_theme_style(dpg.mvStyleVar_WindowPadding, 10, 14)
+
 
 with dpg.theme(tag="base"):
 	with dpg.theme_component():
